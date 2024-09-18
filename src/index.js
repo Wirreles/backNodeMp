@@ -4,14 +4,15 @@ import { initializeApp } from 'firebase-admin/app'; // Puedes usar esto si sigue
 import admin from 'firebase-admin';  // Aquí necesitas `require` para Firebase
 import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
 import * as dotenv from 'dotenv';
-import googleCredentials from './utils/encuentro-8913c-4e5bb6a676e0.json' assert { type: 'json' }; // Importar archivo de credenciales JSON
-
+// import googleCredentials from '../utils/encuentro-8913c-4e5bb6a676e0.json' assert { type: 'json' }; 
 // Cargar variables de entorno
 dotenv.config();
 
+const serviceAccount = JSON.parse(readFileSync('/etc/secrets/encuentro-8913c-4e5bb6a676e0.json', 'utf-8'));
+
 // Inicializar Firebase Admin SDK
 admin.initializeApp({
-  credential: admin.credential.cert(googleCredentials)
+  credential: admin.credential.cert(serviceAccount)
 });
 
 const firestore = admin.firestore();
