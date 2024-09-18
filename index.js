@@ -4,6 +4,7 @@ import { initializeApp } from 'firebase-admin/app'; // Puedes usar esto si sigue
 import admin from 'firebase-admin';  // Aquí necesitas `require` para Firebase
 import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
 import * as dotenv from 'dotenv';
+import { readFileSync } from 'fs';
 // import googleCredentials from '../utils/encuentro-8913c-4e5bb6a676e0.json' assert { type: 'json' }; 
 // Cargar variables de entorno
 dotenv.config();
