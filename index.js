@@ -116,7 +116,7 @@ if (!auctionData || !auctionData.winningUserId) {
         },
         auto_return: 'approved',
         // notification_url: 'https://3745-2803-9800-b8ca-80aa-8963-96e5-33ae-8ef7.ngrok-free.app/payment_success',
-        notification_url: 'https://2b3gbb4p-3300.brs.devtunnels.ms/payment_success',
+        notification_url: 'https://backnodemp.onrender.com/payment_success',
         
       }
     });
