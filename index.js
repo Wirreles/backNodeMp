@@ -56,11 +56,6 @@ if (!auctionData || !auctionData.winningUserId) {
   return res.status(400).json({ error: 'Auction data is incomplete or missing winningUserId' });
 }
 
-if (!auctionData || typeof auctionData.winningUserId === 'undefined') {
-  console.log(`'winningUserId' is missing in the document.`);
-  return res.status(400).json({ error: `'winningUserId' is missing in auction data.` });
-}
-
 if (!auctionDoc.exists) {
   console.log(`Auction with ID ${auctionId} does not exist in Firestore.`);
   return res.status(404).json({ error: 'Auction not found' });
@@ -69,29 +64,8 @@ if (!auctionDoc.exists) {
   console.log('Auction data:', auctionDoc.data());
 }
 
-if (!auctionDoc.exists) {
-  console.log(`Auction with ID ${auctionId} does not exist in Firestore.`);
-  return res.status(404).json({ error: 'Auction not found' });
-}
 
-
-
-if (!auctionData || !auctionData.winningUserId) {
-  console.log(`Missing 'winningUserId' in document data`);
-  return res.status(400).json({ error: 'Auction data is incomplete or missing winningUserId' });
-}
-    
-
-    // if (!auctionDoc.exists) {
-    //   return res.status(404).json({ error: 'Auction not found' });
-    // }
-
-    const auction = auctionDoc.data();
-
-    // Validar si el usuario es el ganador actual de la subasta
-    if (auction.winningUserId !== winningUserId) {
-      return res.status(400).json({ error: 'User is not the current winner of the auction' });
-    }
+const auction = auctionDoc.data();
 
     // Verificar si la subasta ya fue pagada
     if (auction.isPaid) {
@@ -115,30 +89,13 @@ if (!auctionData || !auctionData.winningUserId) {
           failure: 'https://puntoencuentro1-3.vercel.app/perfil/',
         },
         auto_return: 'approved',
-        // notification_url: 'https://3745-2803-9800-b8ca-80aa-8963-96e5-33ae-8ef7.ngrok-free.app/payment_success',
         notification_url: 'https://backnodemp.onrender.com/payment_success',
-        
+        external_reference: winningUserId,
+        metadata: {
+          userId: winningUserId
+        }
       }
     });
-
-    // Inspeccionar la estructura del resultado
-    console.log('Result:', result);
-
-    // Guardar datos temporales en Firestore
-    const tempData = {
-      userId: winningUserId,
-      serviceId: serviceId,
-      auctionId: auctionId,
-      paymentAmount: currentWinningPrice,
-      preferenceId: result?.body?.id || result?.id, // Intenta acceder a result.body.id y result.id
-      status: 'pending',
-    };
-
-    if (!tempData.preferenceId) {
-      throw new Error('Preference ID is undefined');
-    }
-
-    await firestore.collection('tempStorage').add(tempData);
 
     return res.json(result);
   } catch (error) {
@@ -149,59 +106,102 @@ if (!auctionData || !auctionData.winningUserId) {
 
 
 
-// Ruta para manejar el pago exitoso
 app.post('/payment_success', async (req, res) => {
-  const dataId = req.query['data.id'];  // Tomamos el ID desde la query
-  const type1 = req.query['type'];
-  console.log(dataId, type1);
+  try {
+    const { type, data } = req.body;
 
-  if (type1 === 'payment') {
-    try {
-      // Buscar el pago en Mercado Pago usando el ID
-      const payment = new Payment(client);
-      const response = await payment.search(dataId);
-
-      if (!response || !response.results || response.results.length === 0) {
-        return res.status(404).json({ error: 'Payment not found' });
-      }
-
-      // Recuperar el primer documento en la colección tempStorage
-      const tempDataSnap = await firestore.collection('tempStorage').limit(1).get();
-
-      if (tempDataSnap.empty) {
-        return res.status(404).json({ error: 'No temp data found' });
-      }
-
-      // Como solo esperamos un documento, accedemos al primer resultado
-      const tempDoc = tempDataSnap.docs[0];
-      const tempData = tempDoc.data();
-
-      const { serviceId,auctionId, paymentAmount } = tempData;
-
-      // Actualizar los campos de la subasta en Firestore usando auctionId
-      const auctionRef = firestore.collection('subastas').doc(auctionId);
-      await auctionRef.update({
-        isPaid: true,
-        paidAmount: paymentAmount,
-      });
-
-      const serviceRef = firestore.collection('services').doc(serviceId)
-      await serviceRef.update({
-        subastaWinner: true
-      })
-      
-      // Eliminar el documento temporal después de procesar el pago
-      await firestore.collection('tempStorage').doc(tempDoc.id).delete();
-
-      return res.status(200).json({ message: 'Payment processed successfully' });
-    } catch (error) {
-      console.error('Failed to process payment:', error);
-      return res.status(500).json({ error: 'Failed to process payment' });
+    // Verifica si el cuerpo tiene el formato esperado
+    if (!data || !data.id) {
+      console.error("Invalid webhook payload: Missing 'data.id'");
+      return res.status(400).json({ error: "Invalid webhook payload: Missing 'data.id'" });
     }
-  } else {
-    return res.status(400).json({ error: 'Invalid payment type' });
+
+    const paymentId = data.id;
+
+    console.log("Payment ID received from webhook: ", paymentId);
+    console.log("Notification type: ", type);
+
+    // Verifica si la notificación es del tipo "payment"
+    if (type !== "payment") {
+      console.warn(`Unhandled notification type: ${type}`);
+      return res.status(400).json({ error: `Unhandled notification type: ${type}` });
+    }
+
+    // Verifica que las credenciales de MercadoPago estén configuradas correctamente
+    if (!payment) {
+      console.error("MercadoPago SDK not initialized");
+      return res.status(500).json({ error: "Internal server error: MercadoPago SDK not initialized" });
+    }
+
+    let paymentInfo;
+    try {
+      // Realiza el get del pago usando el ID recibido
+      paymentInfo = await payment.get({ id: paymentId });
+      console.log("Payment Info: ", JSON.stringify(paymentInfo, null, 2));
+    } catch (error) {
+      console.error("Error fetching payment info: ", error);
+      return res.status(500).json({ error: "Error fetching payment info" });
+    }
+
+    // Verifica que el pago esté aprobado
+    if (!paymentInfo || paymentInfo.status !== "approved") {
+      console.error("Payment not approved or not found");
+      return res.status(400).json({ error: "Payment not approved or not found" });
+    }
+
+    const { external_reference, transaction_amount, payer } = paymentInfo;
+
+    if (!external_reference) {
+      console.error("No external reference found in payment info");
+      return res.status(400).json({ error: "No external reference found in payment info" });
+    }
+
+    console.log("External reference (winningUserId): ", external_reference);
+
+    // Consulta en la colección de subastas
+    const auctionQuery = await firestore
+      .collection("subastas")
+      .where("winningUserId", "==", external_reference)
+      .where("isPaid", "==", false) // Asegura que la subasta no esté pagada
+      .get();
+
+    if (auctionQuery.empty) {
+      console.error(`No pending auction found for winningUserId: ${external_reference}`);
+      return res.status(404).json({ error: "No pending auction found" });
+    }
+
+    // Toma la primera subasta encontrada
+    const auctionDoc = auctionQuery.docs[0];
+    const auctionData = auctionDoc.data();
+    const { serviceId } = auctionData; // Extrae serviceId de la subasta
+    const auctionRef = auctionDoc.ref;
+
+    console.log(`Auction ID: ${auctionDoc.id}, Service ID: ${serviceId}`);
+
+    // Actualiza la subasta con información del pago
+    await auctionRef.update({
+      isPaid: true,
+      paymentDate: new Date(),
+      status: "completed",
+      paidAmount: transaction_amount,
+      payerEmail: payer?.email || null,
+    });
+
+    // Consulta y actualiza el servicio relacionado
+    const serviceRef = firestore.collection("services").doc(serviceId);
+    await serviceRef.update({
+      subastaWinner: true,
+    });
+
+    console.log(`Service successfully updated in Firestore: ${serviceRef.id}`);
+
+    return res.status(200).json({ message: "Payment processed successfully" });
+  } catch (error) {
+    console.error("Error handling payment webhook: ", error);
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 // Iniciar el servidor
 app.listen(process.env.PORT || 3333, () => {
