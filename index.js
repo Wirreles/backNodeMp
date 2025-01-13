@@ -5,26 +5,30 @@ import admin from 'firebase-admin';  // Aquí necesitas `require` para Firebase
 import { MercadoPagoConfig, Preference, Payment, PreApproval } from 'mercadopago';
 import * as dotenv from 'dotenv';
 import { readFileSync } from 'fs';
-import googleCredentials from './utils/encuentro-8913c-4e5bb6a676e0.json' assert { type: 'json' }; 
+// import googleCredentials from './utils/encuentro-8913c-4e5bb6a676e0.json' assert { type: 'json' }; 
 // Cargar variables de entorno
 dotenv.config();
 
-admin.initializeApp({
-  credential: admin.credential.cert(googleCredentials)
-});
-
-// const serviceAccount = JSON.parse(readFileSync('/etc/secrets/encuentro-8913c-4e5bb6a676e0.json', 'utf-8'));
-// Inicializar Firebase Admin SDK
 // admin.initializeApp({
-//   credential: admin.credential.cert(serviceAccount)
+//   credential: admin.credential.cert(googleCredentials)
 // });
+
+const serviceAccount = JSON.parse(readFileSync('/etc/secrets/encuentro-8913c-4e5bb6a676e0.json', 'utf-8'));
+// Inicializar Firebase Admin SDK
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
 
 const firestore = admin.firestore();
 
-const clientSUB = new MercadoPagoConfig({ 
-  accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN_SUBSCRIPTION
-});
+const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN_SUBSCRIPTION;
 
+// Configuración de Mercado Pago
+if (!accessToken) {
+  throw new Error('El token de acceso de Mercado Pago no está definido.');
+}
+
+const clientSUB = new MercadoPagoConfig({ accessToken });
 const preapproval = new PreApproval(clientSUB);
 
 // SDK de Mercado Pago
@@ -49,7 +53,7 @@ app.use(express.json());
 
 // Ruta para crear la preferencia de pago
 app.post('/create_preference', async (req, res) => {
-  res.header('Access-Control-Allow-Origin', 'https://puntoencuentro1-3.vercel.app');
+  res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   const { serviceId,auctionId, winningUserId, currentWinningPrice } = req.body;
@@ -96,11 +100,11 @@ const auction = auctionDoc.data();
             unit_price: currentWinningPrice,
           },
         ],
-        back_urls: {
-          success: 'https://puntoencuentro1-3.vercel.app/perfil/subastas',
-          failure: 'https://puntoencuentro1-3.vercel.app/perfil/',
-        },
-        auto_return: 'approved',
+        // back_urls: {
+        //   success: 'https://puntoencuentro1-3.vercel.app/perfil/subastas',
+        //   failure: 'https://puntoencuentro1-3.vercel.app/perfil/',
+        // },
+        // auto_return: 'approved',
         notification_url: 'https://backnodemp.onrender.com/payment_success',
         external_reference: winningUserId,
         metadata: {
@@ -217,64 +221,65 @@ app.post('/payment_success', async (req, res) => {
 
 // SUBSCRIPCIONES
 
-// Ruta para crear la preferencia de pago
-// Ruta para crear la preferencia de pago
+// Endpoint para crear una suscripción
 app.post('/create_subscription', async (req, res) => {
-  res.header('Access-Control-Allow-Origin', 'https://puntoencuentro1-3.vercel.app');
+  res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-  const { userId, payer_email } = req.body;
+  const { email, userId } = req.body;
+
+  if (!email) {
+    return res.status(400).json({
+      error: 'El campo email es obligatorio.',
+    });
+  }
 
   try {
-    if (!userId || !payer_email) {
-      return res.status(400).json({ error: "userId and payer_email are required" });
-    }
-
-    // Generar un ID único para la orden de compra
-    const subId = createIdDoc();
-   
-    const preapproval = new PreApproval(clientSUB);
-    
-    // Crear la suscripción usando Mercado Pago
-    const result = await preapproval.create({ 
-      body: {
-      reason: "Suscripción estándar", // Descripción de la suscripción
-      external_reference: userId, // Referencia externa al usuario
-      payer_email: payer_email, // Correo del pagador
+    // Configuración del cuerpo de la solicitud de suscripción
+    const body = {
+      reason: 'Suscripción estándar', // Razón o descripción de la suscripción
+      external_reference:  userId,
       auto_recurring: {
         frequency: 1, // Frecuencia de la recurrencia
-        frequency_type: "months", // Tipo de frecuencia (meses)
-        start_date: new Date().toISOString(), // Fecha de inicio
-        end_date: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString(), // Fecha de finalización
+        frequency_type: 'months', // Tipo de frecuencia
         transaction_amount: 100.0, // Monto de la transacción
-        currency_id: "ARS", // Moneda de la transacción
+        currency_id: 'ARS', // Moneda
       },
-      back_url: "https://puntoencuentro1-3.vercel.app/perfil/subastas",
-      notification_url: "https://8ed7-2803-9800-b8ca-80a8-9062-a2c8-ebd4-eb4c.ngrok-free.app/sub_success",
-      metadata: {
-        user_id: userId, // Metadata opcional
-      },
-    } });
-
-    // Guardar los datos de la suscripción en Firestore
-    const subData = {
-      userId: userId,
-      preferenceId: result?.body?.id || result?.id,
-      subId: subId,
+      payer_email: email, // Email del pagador
+      // back_url: 'https://puntoencuentro1-3.vercel.app/perfil/subastas', 
+      notification_url: 'https://backnodemp.onrender.com/sub_success', 
+      status: 'pending',
     };
 
-    const subscriptionRef = firestore.collection("subscriptions").doc(subId);
+    // Crear la suscripción a través de Mercado Pago
+    const response = await preapproval.create({ body });
+
+    // Generar un ID único para la suscripción en Firestore
+    const subId = firestore.collection('subscriptions').doc().id;
+
+    // Datos de la suscripción a guardar
+    const subData = {
+      email, // Correo del suscriptor
+      subscriptionId: response.id, // ID de la suscripción creada en Mercado Pago
+      subId, // ID generado en Firestore
+      createdAt: new Date().toISOString(), // Fecha de creación
+      userId: userId
+    };
+
+    // Guardar los datos de la suscripción en Firestore
+    const subscriptionRef = firestore.collection('subscriptions').doc(subId);
     await subscriptionRef.set(subData);
 
-    console.log("Suscripción creada exitosamente: ", subData);
-
-    return res.json(result);
+    return res.status(200).json({ init_point: response.init_point });
   } catch (error) {
-    console.error("Error creating subscription:", error.response?.message || error.message);
-    return res.status(500).json({ error: "Failed to create subscription" });
+    console.error('Error al crear la suscripción:', error.response?.data || error.message);
+    return res.status(500).json({
+      error: 'Ocurrió un error al intentar crear la suscripción.',
+    });
   }
 });
+
 
 
 // Implementación de la función para generar un ID único (similar a createIdDoc)
@@ -284,9 +289,9 @@ function createIdDoc() {
 
 app.post('/sub_success', async (req, res) => {
   try {
-    const { action, data } = req.body;
+    const { type, data } = req.body;
 
-    // Verifica que el payload tenga el formato esperado
+    // Validación básica del payload
     if (!data || !data.id) {
       console.error("Invalid webhook payload: Missing 'data.id'");
       return res.status(400).json({ error: "Invalid webhook payload: Missing 'data.id'" });
@@ -294,69 +299,72 @@ app.post('/sub_success', async (req, res) => {
 
     const subscriptionId = data.id;
 
-    console.log("Subscription ID received from webhook: ", subscriptionId);
-    console.log("Action: ", action);
-
-    // Verifica si la acción es válida para suscripciones
-    if (action !== "created" && action !== "updated") {
-      console.warn(`Unhandled action type: ${action}`);
-      return res.status(400).json({ error: `Unhandled action type: ${action}` });
+    // Verifica si el tipo es válido para suscripciones
+    if (type !== "subscription_preapproval") {
+      console.warn(`Unhandled type: ${type}`);
+      return res.status(400).json({ error: `Unhandled type: ${type}` });
     }
 
     // Obtén los detalles de la suscripción desde Mercado Pago
     let subscriptionDetails;
     try {
-      subscriptionDetails = await preapproval.get({ id : subscriptionId});
-      console.log("Subscription Details: ", JSON.stringify(subscriptionDetails, null, 2));
+      subscriptionDetails = await preapproval.get({ id: subscriptionId });
     } catch (error) {
       console.error("Error fetching subscription details: ", error);
       return res.status(500).json({ error: "Error fetching subscription details" });
     }
 
-    // Verifica el estado de la suscripción
+    // Verifica el estado y realiza acciones según corresponda
     const { external_reference, status } = subscriptionDetails;
-    if (status !== "authorized") {
-      console.warn(`Subscription status is not 'authorized': ${status}`);
-      return res.status(400).json({ error: `Invalid subscription status: ${status}` });
-    }
 
-    // Verifica que external_reference exista
     if (!external_reference) {
       console.error("No external reference found in subscription details");
       return res.status(400).json({ error: "No external reference found in subscription details" });
     }
 
-    console.log("External reference: ", external_reference);
-
-    // Busca en la colección de suscripciones en Firestore por userId
+    // Busca en Firestore por el `userId` referenciado en `external_reference`
     const subscriptionSnapshot = await firestore
-      .collection("subscriptions")
-      .where("userId", "==", external_reference)
+      .collection('subscriptions')
+      .where('userId', '==', external_reference)
       .get();
 
     if (subscriptionSnapshot.empty) {
       console.error(`No subscription found in Firestore with external_reference: ${external_reference}`);
-      return res.status(404).json({ error: "No subscription found" });
+      return res.status(404).json({ error: 'No subscription found' });
     }
 
-    // Toma el primer documento encontrado (asumiendo que external_reference es único)
+    // Toma el primer documento encontrado
     const subscriptionDoc = subscriptionSnapshot.docs[0];
     const subscriptionRef = subscriptionDoc.ref;
 
-    // Actualiza Firestore con el nuevo estado de la suscripción
-    await subscriptionRef.update({
-      status: status,
-      lastUpdated: new Date(),
-    });
+    // Maneja el estado de la suscripción
+    if (status === "authorized") {
+      // Pago autorizado
+      await subscriptionRef.update({
+        status: "active",
+        lastUpdated: new Date(),
+      });
+      console.log(`Subscription successfully activated: ${subscriptionRef.id}`);
+    } else if (status === "cancelled") {
+      // Suscripción cancelada
+      await subscriptionRef.update({
+        status: "cancelled",
+        lastUpdated: new Date(),
+      });
+      console.log(`Subscription successfully cancelled: ${subscriptionRef.id}`);
+    } else {
+      console.warn(`Unhandled subscription status: ${status}`);
+      return res.status(400).json({ error: `Unhandled subscription status: ${status}` });
+    }
 
-    console.log(`Subscription successfully updated in Firestore: ${subscriptionRef.id}`);
-
-    return res.status(200).json({ message: "Subscription processed successfully" });
+    // Responde exitosamente al webhook
+    return res.status(200).json({ message: 'Subscription processed successfully' });
   } catch (error) {
     console.error("Error handling subscription webhook: ", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 
 
