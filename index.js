@@ -5,7 +5,7 @@ import admin from 'firebase-admin';  // Aquí necesitas `require` para Firebase
 import { MercadoPagoConfig, Preference, Payment, PreApproval } from 'mercadopago';
 import * as dotenv from 'dotenv';
 import { readFileSync } from 'fs';
-// import googleCredentials from './utils/encuentro-8913c-4e5bb6a676e0.json' assert { type: 'json' }; 
+// import googleCredentials from './utils/encuentro-8913c-4e5bb6a676e0.json' assert { type: 'json' };  
 // Cargar variables de entorno
 dotenv.config();
 
@@ -13,7 +13,7 @@ dotenv.config();
 //   credential: admin.credential.cert(googleCredentials)
 // });
 
-const serviceAccount = JSON.parse(readFileSync('/etc/secrets/encuentro-8913c-4e5bb6a676e0.json', 'utf-8'));
+const serviceAccount = JSON.parse(readFileSync('/etc/secrets/encuentro-8913c-4e5bb6a676e0.json', 'utf-8')); 
 // Inicializar Firebase Admin SDK
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -100,11 +100,11 @@ const auction = auctionDoc.data();
             unit_price: currentWinningPrice,
           },
         ],
-        // back_urls: {
-        //   success: 'https://puntoencuentro1-3.vercel.app/perfil/subastas',
-        //   failure: 'https://puntoencuentro1-3.vercel.app/perfil/',
-        // },
-        // auto_return: 'approved',
+        back_urls: {
+          success: 'https://puntoencuentro1-3.vercel.app/perfil/subastas',
+          failure: 'https://puntoencuentro1-3.vercel.app/perfil/',
+        },
+        auto_return: 'approved',
         notification_url: 'https://backnodemp.onrender.com/payment_success',
         external_reference: winningUserId,
         metadata: {
@@ -247,7 +247,7 @@ app.post('/create_subscription', async (req, res) => {
         currency_id: 'ARS', // Moneda
       },
       payer_email: email, // Email del pagador
-      // back_url: 'https://puntoencuentro1-3.vercel.app/perfil/subastas', 
+      back_url: 'https://puntoencuentro1-3.vercel.app/perfil/subastas', 
       notification_url: 'https://backnodemp.onrender.com/sub_success', 
       status: 'pending',
     };
