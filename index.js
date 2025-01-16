@@ -13,7 +13,7 @@ dotenv.config();
 //   credential: admin.credential.cert(googleCredentials)
 // });
 
-const serviceAccount = JSON.parse(readFileSync('/etc/secrets/encuentro-8913c-4e5bb6a676e0.json', 'utf-8')); 
+const serviceAccount = JSON.parse(readFileSync('/etc/secrets/encuentro-8913c-4e5bb6a676e0.json', 'utf-8'));  
 // Inicializar Firebase Admin SDK
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -22,7 +22,7 @@ admin.initializeApp({
 const firestore = admin.firestore();
 
 const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN_SUBSCRIPTION;
-
+console.log(accessToken)
 // Configuración de Mercado Pago
 if (!accessToken) {
   throw new Error('El token de acceso de Mercado Pago no está definido.');
@@ -238,13 +238,13 @@ app.post('/create_subscription', async (req, res) => {
   try {
     // Configuración del cuerpo de la solicitud de suscripción
     const body = {
-      reason: 'Suscripción estándar', // Razón o descripción de la suscripción
+      reason: 'Suscripción estándar', 
       external_reference:  userId,
       auto_recurring: {
-        frequency: 1, // Frecuencia de la recurrencia
-        frequency_type: 'months', // Tipo de frecuencia
-        transaction_amount: 100.0, // Monto de la transacción
-        currency_id: 'ARS', // Moneda
+        frequency: 1, 
+        frequency_type: 'months', 
+        transaction_amount: 100.0, 
+        currency_id: 'ARS', 
       },
       payer_email: email, // Email del pagador
       back_url: 'https://puntoencuentro1-3.vercel.app/perfil/subastas', 
